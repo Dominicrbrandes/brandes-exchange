@@ -4,18 +4,46 @@
 
 namespace exchange {
 
-EventLog::EventLog(const std::string& path) : path_(path) {
+EventLog::EventLog(const std::string& path, Durability durability)
+    : path_(path), durability_(durability) {
     if (!path_.empty()) {
         file_.open(path_, std::ios::app);
         enabled_ = file_.is_open();
     }
 }
 
+EventLog::~EventLog() {
+    // Buffered mode would otherwise drop the tail of the log on a clean exit.
+    if (enabled_) {
+        std::lock_guard<std::mutex> lock(mutex_);
+        file_.flush();
+    }
+}
+
 void EventLog::append(const Event& event) {
     if (!enabled_) return;
     std::lock_guard<std::mutex> lock(mutex_);
-    nlohmann::json j = event;
-    file_ << j.dump() << "\n";
+    file_ << nlohmann::json(event).dump() << "\n";
+    if (durability_ == Durability::PerEvent) {
+        file_.flush();
+    }
+}
+
+void EventLog::append_preformatted(uint64_t sequence, uint64_t timestamp_ns,
+                                   EventType type, const std::string& payload_json) {
+    if (!enabled_) return;
+    std::lock_guard<std::mutex> lock(mutex_);
+    file_ << "{\"sequence\":" << sequence << ",\"timestamp_ns\":" << timestamp_ns
+          << ",\"type\":\"" << to_string(type) << "\",\"payload\":" << payload_json
+          << "}\n";
+    if (durability_ == Durability::PerEvent) {
+        file_.flush();
+    }
+}
+
+void EventLog::flush() {
+    if (!enabled_) return;
+    std::lock_guard<std::mutex> lock(mutex_);
     file_.flush();
 }
 

@@ -14,8 +14,9 @@ namespace exchange {
 
 MatchingEngine::MatchingEngine(const std::string& event_log_path,
                                const std::string& snapshot_path,
-                               uint64_t snapshot_interval)
-    : event_log_(event_log_path),
+                               uint64_t snapshot_interval,
+                               Durability durability)
+    : event_log_(event_log_path, durability),
       snapshot_manager_(snapshot_path, snapshot_interval) {}
 
 PlaceOrderResult MatchingEngine::place_order(Order order) {
@@ -79,34 +80,12 @@ PlaceOrderResult MatchingEngine::place_order(Order order) {
             raw->status = OrderStatus::PARTIAL;
         }
     } else if (raw->type == OrderType::LIMIT && raw->remaining_qty > 0) {
-        // Limit order with remaining qty - check if adding would cross the book
+        // Anything still unfilled here is either priced away from the book or
+        // blocked only by this account's own resting orders, which match()
+        // stepped over. Both are legitimate reasons to rest, so the order is
+        // never rejected at this point. Rejecting here used to strand an order
+        // in REJECTED after it had already traded against other accounts.
         auto& book = get_or_create_book(raw->symbol);
-        
-        bool would_cross = false;
-        if (raw->side == Side::BUY) {
-            auto best_ask = book.best_ask_price();
-            if (best_ask && raw->price >= *best_ask) {
-                would_cross = true;
-            }
-        } else {
-            auto best_bid = book.best_bid_price();
-            if (best_bid && raw->price <= *best_bid) {
-                would_cross = true;
-            }
-        }
-        
-        if (would_cross) {
-            // This can happen due to self-trade prevention
-            // Reject the order to maintain book integrity
-            raw->status = OrderStatus::REJECTED;
-            r.success = false;
-            r.error_code = ErrorCode::SELF_TRADE_PREVENTED;
-            stats_.total_rejects++;
-            r.order = *raw;
-            return r;
-        }
-        
-        // Safe to add to book
         book.add_order(raw);
         if (raw->remaining_qty < raw->quantity) {
             raw->status = OrderStatus::PARTIAL;
@@ -123,30 +102,45 @@ std::vector<Trade> MatchingEngine::match(Order* incoming) {
     std::vector<Trade> trades;
     auto& book = get_or_create_book(incoming->symbol);
 
-    while (incoming->remaining_qty > 0) {
-        // choose side to match against
-        std::vector<Order*> resting;
-        if (incoming->side == Side::BUY) {
-            resting = book.get_asks_at_best();
-        } else {
-            resting = book.get_bids_at_best();
-        }
+    const Side opp = (incoming->side == Side::BUY) ? Side::SELL : Side::BUY;
 
-        if (resting.empty()) break;
+    // Walk price levels best-first without copying the book. `skip` counts the
+    // orders at the front of the current level that belong to the incoming
+    // account, which self-trade prevention steps over. Everything else is
+    // consumed from the front, so when a resting order fills completely and is
+    // erased the next one shifts into the same index.
+    std::optional<int64_t> level_price =
+        (opp == Side::SELL) ? book.best_ask_price() : book.best_bid_price();
+    size_t skip = 0;
 
-        Order* best = resting.front();
-        if (!best) break;
-
-        // for limit orders ensure price is acceptable
+    while (incoming->remaining_qty > 0 && level_price) {
+        // for limit orders ensure price is acceptable. Levels are visited
+        // best-first, so the first unacceptable one ends matching.
         if (incoming->type == OrderType::LIMIT) {
-            if (incoming->side == Side::BUY && best->price > incoming->price) break;
-            if (incoming->side == Side::SELL && best->price < incoming->price) break;
+            if (incoming->side == Side::BUY && *level_price > incoming->price) break;
+            if (incoming->side == Side::SELL && *level_price < incoming->price) break;
         }
 
-        // Self-trade prevention: skip this match entirely
+        const std::vector<Order*>* level = book.orders_at(opp, *level_price);
+        if (!level || skip >= level->size()) {
+            level_price = book.next_price_after(opp, *level_price);
+            skip = 0;
+            continue;
+        }
+
+        Order* best = (*level)[skip];
+        if (!best || best->remaining_qty <= 0) {
+            ++skip;
+            continue;
+        }
+
+        // Self-trade prevention: step over our own resting orders and keep
+        // matching deeper in the book. Skipping rather than breaking is what
+        // stops an order from ending up REJECTED after it has already filled
+        // against other accounts.
         if (incoming->account_id == best->account_id) {
-            // Don't match against own orders - break and let caller handle
-            break;
+            ++skip;
+            continue;
         }
 
         int64_t qty = std::min(incoming->remaining_qty, best->remaining_qty);
@@ -265,15 +259,6 @@ EngineStats MatchingEngine::get_stats() const {
     return s;
 }
 
-void MatchingEngine::log_event(EventType type, const nlohmann::json& payload) {
-    Event e;
-    e.sequence = event_log_.next_sequence();
-    e.timestamp_ns = now_ns();
-    e.type = type;
-    e.payload = payload;
-    event_log_.append(e);
-}
-
 bool MatchingEngine::recover() {
     // First, try to load from snapshot
     auto snap = snapshot_manager_.load_latest();
@@ -328,7 +313,7 @@ void MatchingEngine::replay_events(const std::vector<Event>& events) {
     for (const auto& event : events) {
         switch (event.type) {
             case EventType::ORDER_PLACED: {
-                Order order = event.payload.get<Order>();
+                Order order = order_from_persisted(event.payload);
                 
                 // Check if order already exists (from snapshot)
                 if (orders_.find(order.id) != orders_.end()) {

@@ -20,7 +20,13 @@ void from_json(const nlohmann::json& j, Snapshot& s) {
     j.at("timestamp_ns").get_to(s.timestamp_ns);
     j.at("next_order_id").get_to(s.next_order_id);
     j.at("next_trade_id").get_to(s.next_trade_id);
-    j.at("orders").get_to(s.orders);
+
+    // Snapshots are trusted state we wrote, so restore orders at full fidelity.
+    // get_to would dispatch to from_json(Order) and drop id, status and fills.
+    s.orders.clear();
+    for (const auto& item : j.at("orders")) {
+        s.orders.push_back(order_from_persisted(item));
+    }
 }
 
 SnapshotManager::SnapshotManager(const std::string& path, uint64_t interval)

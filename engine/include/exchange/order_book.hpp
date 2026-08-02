@@ -34,6 +34,12 @@ public:
     [[nodiscard]] bool is_crossed() const;
     [[nodiscard]] Order* get_order(uint64_t order_id) const;
 
+    // Matching-path accessors. These hand out a pointer to the live level
+    // rather than a copy, so the hot loop never allocates. The returned pointer
+    // is invalidated by anything that removes the last order at that price.
+    [[nodiscard]] const std::vector<Order*>* orders_at(Side side, int64_t price) const;
+    [[nodiscard]] std::optional<int64_t> next_price_after(Side side, int64_t price) const;
+
     [[nodiscard]] const std::string& symbol() const { return symbol_; }
     [[nodiscard]] size_t bid_count() const { return bid_orders_.size(); }
     [[nodiscard]] size_t ask_count() const { return ask_orders_.size(); }

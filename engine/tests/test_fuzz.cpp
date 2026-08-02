@@ -40,14 +40,20 @@ TEST_CASE("Fuzz - Book never crossed", "[fuzz]") {
                      result.error_code == ErrorCode::NO_LIQUIDITY));
         }
 
-        // Invariant check: book should never be crossed
+        // Invariant check: the book may be crossed only by a single account's
+        // own orders, which self-trade prevention deliberately steps over. A
+        // cross between two different accounts means matching missed a fill.
         auto* book = engine.get_book("BTC-USD");
         if (book) {
-            auto bid = book->best_bid_price();
-            auto ask = book->best_ask_price();
-            if (bid && ask) {
-                INFO("After order " << i << ": bid=" << *bid << " ask=" << *ask);
-                REQUIRE(*bid < *ask);
+            for (const auto* b : book->get_all_bids()) {
+                for (const auto* a : book->get_all_asks()) {
+                    if (b->price >= a->price) {
+                        INFO("After order " << i << ": bid=" << b->price << " ("
+                                            << b->account_id << ") ask=" << a->price
+                                            << " (" << a->account_id << ")");
+                        REQUIRE(b->account_id == a->account_id);
+                    }
+                }
             }
         }
     }

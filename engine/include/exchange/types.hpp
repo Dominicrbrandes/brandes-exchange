@@ -59,7 +59,16 @@ struct Order {
 };
 
 void to_json(nlohmann::json& j, const Order& o);
+
+// Parses an untrusted client request. Deliberately ignores id, status and
+// timestamp_ns, and forces remaining_qty = quantity, so a client cannot assign
+// its own order id or claim a fill. Do not use this to restore persisted state.
 void from_json(const nlohmann::json& j, Order& o);
+
+// Full-fidelity restore for trusted state we wrote ourselves (event log and
+// snapshots). Round-trips every field that to_json emits. Replay must go
+// through this rather than from_json, or fills are silently resurrected.
+[[nodiscard]] Order order_from_persisted(const nlohmann::json& j);
 
 struct Trade {
     uint64_t id = 0;
@@ -109,6 +118,20 @@ struct Event {
 
 void to_json(nlohmann::json& j, const Event& e);
 void from_json(const nlohmann::json& j, Event& e);
+
+// Direct serializers for the logging hot path. Building an nlohmann DOM for
+// every order and trade, nesting it inside an Event DOM and then dumping it
+// cost several microseconds per event and dominated the durable write path.
+// These append the identical wire format straight into a reusable buffer.
+// They must stay byte-compatible with the to_json overloads above, which
+// test_event_format.cpp checks.
+void append_json(std::string& out, const Order& o);
+void append_json(std::string& out, const Trade& t);
+
+[[nodiscard]] const char* to_string(Side s);
+[[nodiscard]] const char* to_string(OrderType t);
+[[nodiscard]] const char* to_string(OrderStatus s);
+[[nodiscard]] const char* to_string(EventType t);
 
 // Error codes for API responses
 enum class ErrorCode {

@@ -127,6 +127,27 @@ std::vector<BookLevel> OrderBook::get_ask_levels(size_t depth) const {
     return levels;
 }
 
+const std::vector<Order*>* OrderBook::orders_at(Side side, int64_t price) const {
+    if (side == Side::BUY) {
+        auto it = bids_.find(price);
+        return it == bids_.end() ? nullptr : &it->second;
+    }
+    auto it = asks_.find(price);
+    return it == asks_.end() ? nullptr : &it->second;
+}
+
+std::optional<int64_t> OrderBook::next_price_after(Side side, int64_t price) const {
+    // Both maps are ordered best-first, so "next" is simply the following key.
+    if (side == Side::BUY) {
+        auto it = bids_.upper_bound(price);
+        if (it == bids_.end()) return std::nullopt;
+        return it->first;
+    }
+    auto it = asks_.upper_bound(price);
+    if (it == asks_.end()) return std::nullopt;
+    return it->first;
+}
+
 bool OrderBook::is_crossed() const {
     auto bid = best_bid_price();
     auto ask = best_ask_price();

@@ -2,6 +2,8 @@ add_executable(exchange_tests
     test_main.cpp
     test_order_book.cpp
     test_matching.cpp
+    test_stp.cpp
+    test_event_format.cpp
     test_risk.cpp
     test_replay.cpp
     test_fuzz.cpp
