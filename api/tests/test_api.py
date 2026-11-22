@@ -1,7 +1,11 @@
 """API integration tests."""
 
+from pathlib import Path
+
 import pytest
 from httpx import AsyncClient
+
+from app.config import settings
 
 
 @pytest.mark.asyncio
@@ -43,6 +47,7 @@ async def test_place_order_requires_auth(client: AsyncClient):
 
 
 @pytest.mark.asyncio
+@pytest.mark.skipif(not Path(settings.ENGINE_PATH).exists(), reason="engine binary not built")
 async def test_get_book(client: AsyncClient):
     """Test order book endpoint."""
     response = await client.get("/api/v1/book/BTC-USD")

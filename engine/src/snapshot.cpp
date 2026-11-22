@@ -7,13 +7,13 @@
 namespace exchange {
 
 void to_json(nlohmann::json& j, const Snapshot& s) {
-    j = nlohmann::json{
-        {"sequence", s.sequence},
-        {"timestamp_ns", s.timestamp_ns},
-        {"next_order_id", s.next_order_id},
-        {"next_trade_id", s.next_trade_id},
-        {"orders", s.orders},
-        {"idempotency_keys", s.idempotency_keys}};
+    j = nlohmann::json{{"sequence", s.sequence},
+                       {"timestamp_ns", s.timestamp_ns},
+                       {"next_order_id", s.next_order_id},
+                       {"next_trade_id", s.next_trade_id},
+                       {"orders", s.orders},
+                       {"idempotency_keys", s.idempotency_keys},
+                       {"positions", s.positions}};
 }
 
 void from_json(const nlohmann::json& j, Snapshot& s) {
@@ -29,6 +29,7 @@ void from_json(const nlohmann::json& j, Snapshot& s) {
         s.orders.push_back(order_from_persisted(item));
     }
     s.idempotency_keys = j.value("idempotency_keys", std::vector<std::string>{});
+    s.positions = j.value("positions", std::map<std::string, std::map<std::string, Position>>{});
 }
 
 SnapshotManager::SnapshotManager(const std::string& path, uint64_t interval)
@@ -45,8 +46,7 @@ bool SnapshotManager::should_snapshot(uint64_t current_sequence) const {
 void SnapshotManager::save(const Snapshot& snapshot) {
     if (path_.empty()) return;
 
-    std::string filename =
-        path_ + "/snapshot_" + std::to_string(snapshot.sequence) + ".json";
+    std::string filename = path_ + "/snapshot_" + std::to_string(snapshot.sequence) + ".json";
 
     std::ofstream file(filename);
     if (file.is_open()) {

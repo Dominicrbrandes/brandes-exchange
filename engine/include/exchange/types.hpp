@@ -2,11 +2,10 @@
 
 #include <chrono>
 #include <cstdint>
+#include <nlohmann/json.hpp>
 #include <string>
 #include <unordered_map>
 #include <vector>
-
-#include <nlohmann/json.hpp>
 
 namespace exchange {
 
@@ -24,29 +23,20 @@ enum class OrderType { LIMIT, MARKET };
 enum class TimeInForce { GTC, IOC, FOK };
 enum class OrderStatus { NEW, PARTIAL, FILLED, CANCELLED, REJECTED };
 
-NLOHMANN_JSON_SERIALIZE_ENUM(Side, {
-    {Side::BUY, "BUY"}, 
-    {Side::SELL, "SELL"}
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(Side, {{Side::BUY, "BUY"}, {Side::SELL, "SELL"}})
 
-NLOHMANN_JSON_SERIALIZE_ENUM(OrderType, {
-    {OrderType::LIMIT, "LIMIT"}, 
-    {OrderType::MARKET, "MARKET"}
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(OrderType,
+                             {{OrderType::LIMIT, "LIMIT"}, {OrderType::MARKET, "MARKET"}})
 
-NLOHMANN_JSON_SERIALIZE_ENUM(TimeInForce, {
-    {TimeInForce::GTC, "GTC"},
-    {TimeInForce::IOC, "IOC"},
-    {TimeInForce::FOK, "FOK"}
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(TimeInForce, {{TimeInForce::GTC, "GTC"},
+                                           {TimeInForce::IOC, "IOC"},
+                                           {TimeInForce::FOK, "FOK"}})
 
-NLOHMANN_JSON_SERIALIZE_ENUM(OrderStatus, {
-    {OrderStatus::NEW, "NEW"},
-    {OrderStatus::PARTIAL, "PARTIAL"},
-    {OrderStatus::FILLED, "FILLED"},
-    {OrderStatus::CANCELLED, "CANCELLED"},
-    {OrderStatus::REJECTED, "REJECTED"}
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(OrderStatus, {{OrderStatus::NEW, "NEW"},
+                                           {OrderStatus::PARTIAL, "PARTIAL"},
+                                           {OrderStatus::FILLED, "FILLED"},
+                                           {OrderStatus::CANCELLED, "CANCELLED"},
+                                           {OrderStatus::REJECTED, "REJECTED"}})
 
 struct Order {
     uint64_t id = 0;
@@ -55,9 +45,9 @@ struct Order {
     Side side = Side::BUY;
     OrderType type = OrderType::LIMIT;
     TimeInForce time_in_force = TimeInForce::GTC;
-    int64_t price = 0;           // In fixed-point units
-    int64_t quantity = 0;        // Original quantity
-    int64_t remaining_qty = 0;   // Unfilled quantity
+    int64_t price = 0;          // In fixed-point units
+    int64_t quantity = 0;       // Original quantity
+    int64_t remaining_qty = 0;  // Unfilled quantity
     uint64_t timestamp_ns = 0;
     OrderStatus status = OrderStatus::NEW;
     std::string idempotency_key;
@@ -67,9 +57,7 @@ struct Order {
         return status == OrderStatus::NEW || status == OrderStatus::PARTIAL;
     }
 
-    [[nodiscard]] int64_t filled_qty() const { 
-        return quantity - remaining_qty; 
-    }
+    [[nodiscard]] int64_t filled_qty() const { return quantity - remaining_qty; }
 };
 
 void to_json(nlohmann::json& j, const Order& o);
@@ -116,14 +104,12 @@ enum class EventType {
     ORDER_REPLACED
 };
 
-NLOHMANN_JSON_SERIALIZE_ENUM(EventType, {
-    {EventType::ORDER_PLACED, "ORDER_PLACED"},
-    {EventType::ORDER_CANCELLED, "ORDER_CANCELLED"},
-    {EventType::ORDER_REJECTED, "ORDER_REJECTED"},
-    {EventType::TRADE_EXECUTED, "TRADE_EXECUTED"},
-    {EventType::SNAPSHOT_MARKER, "SNAPSHOT_MARKER"},
-    {EventType::ORDER_REPLACED, "ORDER_REPLACED"}
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(EventType, {{EventType::ORDER_PLACED, "ORDER_PLACED"},
+                                         {EventType::ORDER_CANCELLED, "ORDER_CANCELLED"},
+                                         {EventType::ORDER_REJECTED, "ORDER_REJECTED"},
+                                         {EventType::TRADE_EXECUTED, "TRADE_EXECUTED"},
+                                         {EventType::SNAPSHOT_MARKER, "SNAPSHOT_MARKER"},
+                                         {EventType::ORDER_REPLACED, "ORDER_REPLACED"}})
 
 struct Event {
     uint64_t sequence = 0;
@@ -168,22 +154,21 @@ enum class ErrorCode {
     INTERNAL_ERROR
 };
 
-NLOHMANN_JSON_SERIALIZE_ENUM(ErrorCode, {
-    {ErrorCode::NONE, "NONE"},
-    {ErrorCode::INVALID_QUANTITY, "INVALID_QUANTITY"},
-    {ErrorCode::INVALID_PRICE, "INVALID_PRICE"},
-    {ErrorCode::INVALID_SYMBOL, "INVALID_SYMBOL"},
-    {ErrorCode::INVALID_SIDE, "INVALID_SIDE"},
-    {ErrorCode::INVALID_ORDER_TYPE, "INVALID_ORDER_TYPE"},
-    {ErrorCode::ORDER_NOT_FOUND, "ORDER_NOT_FOUND"},
-    {ErrorCode::INSUFFICIENT_BALANCE, "INSUFFICIENT_BALANCE"},
-    {ErrorCode::MAX_ORDER_SIZE_EXCEEDED, "MAX_ORDER_SIZE_EXCEEDED"},
-    {ErrorCode::MAX_NOTIONAL_EXCEEDED, "MAX_NOTIONAL_EXCEEDED"},
-    {ErrorCode::SELF_TRADE_PREVENTED, "SELF_TRADE_PREVENTED"},
-    {ErrorCode::NO_LIQUIDITY, "NO_LIQUIDITY"},
-    {ErrorCode::DUPLICATE_IDEMPOTENCY_KEY, "DUPLICATE_IDEMPOTENCY_KEY"},
-    {ErrorCode::INTERNAL_ERROR, "INTERNAL_ERROR"}
-})
+NLOHMANN_JSON_SERIALIZE_ENUM(ErrorCode,
+                             {{ErrorCode::NONE, "NONE"},
+                              {ErrorCode::INVALID_QUANTITY, "INVALID_QUANTITY"},
+                              {ErrorCode::INVALID_PRICE, "INVALID_PRICE"},
+                              {ErrorCode::INVALID_SYMBOL, "INVALID_SYMBOL"},
+                              {ErrorCode::INVALID_SIDE, "INVALID_SIDE"},
+                              {ErrorCode::INVALID_ORDER_TYPE, "INVALID_ORDER_TYPE"},
+                              {ErrorCode::ORDER_NOT_FOUND, "ORDER_NOT_FOUND"},
+                              {ErrorCode::INSUFFICIENT_BALANCE, "INSUFFICIENT_BALANCE"},
+                              {ErrorCode::MAX_ORDER_SIZE_EXCEEDED, "MAX_ORDER_SIZE_EXCEEDED"},
+                              {ErrorCode::MAX_NOTIONAL_EXCEEDED, "MAX_NOTIONAL_EXCEEDED"},
+                              {ErrorCode::SELF_TRADE_PREVENTED, "SELF_TRADE_PREVENTED"},
+                              {ErrorCode::NO_LIQUIDITY, "NO_LIQUIDITY"},
+                              {ErrorCode::DUPLICATE_IDEMPOTENCY_KEY, "DUPLICATE_IDEMPOTENCY_KEY"},
+                              {ErrorCode::INTERNAL_ERROR, "INTERNAL_ERROR"}})
 
 // Get human-readable error message
 [[nodiscard]] std::string error_message(ErrorCode code);
@@ -199,5 +184,22 @@ struct BookLevel {
 };
 
 void to_json(nlohmann::json& j, const BookLevel& l);
+
+// An account's net result from trading one symbol, built from its fills.
+// base:  units of the asset bought minus units sold (fixed-point)
+// quote: cash received minus cash paid, in the quote currency (fixed-point)
+struct Position {
+    int64_t base = 0;
+    int64_t quote = 0;
+
+    bool operator==(const Position&) const = default;
+};
+
+void to_json(nlohmann::json& j, const Position& p);
+void from_json(const nlohmann::json& j, Position& p);
+
+// Cash value of `quantity` units at `price`, both fixed-point, rounded toward
+// zero. The intermediate product does not fit in 64 bits for large orders.
+[[nodiscard]] int64_t notional(int64_t price, int64_t quantity);
 
 }  // namespace exchange

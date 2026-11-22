@@ -34,8 +34,7 @@ RiskCheckResult RiskChecker::check_order(const Order& order) const {
     }
 
     if (order.type == OrderType::LIMIT) {
-        long double notional =
-            static_cast<long double>(order.price) * order.quantity / PRICE_SCALE;
+        long double notional = static_cast<long double>(order.price) * order.quantity / PRICE_SCALE;
         if (notional > limits_.max_notional) {
             r.passed = false;
             r.error_code = ErrorCode::MAX_NOTIONAL_EXCEEDED;
@@ -47,9 +46,8 @@ RiskCheckResult RiskChecker::check_order(const Order& order) const {
 }
 
 bool RiskChecker::is_valid_symbol(const std::string& symbol) const {
-    return std::find(limits_.allowed_symbols.begin(),
-                     limits_.allowed_symbols.end(),
-                     symbol) != limits_.allowed_symbols.end();
+    return std::find(limits_.allowed_symbols.begin(), limits_.allowed_symbols.end(), symbol) !=
+           limits_.allowed_symbols.end();
 }
 
 }  // namespace exchange

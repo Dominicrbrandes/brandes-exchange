@@ -124,6 +124,34 @@ class EngineClient:
     async def cancel_order(self, order_id: int) -> dict[str, Any]:
         return await self.send_command({"cmd": "cancel_order", "req_id": str(uuid4()), "order_id": order_id})
 
+    async def replace_order(self, order_id: int, price: int, quantity: int) -> dict[str, Any]:
+        return await self.send_command(
+            {
+                "cmd": "replace_order",
+                "req_id": str(uuid4()),
+                "order_id": order_id,
+                "price": price,
+                "quantity": quantity,
+            }
+        )
+
+    async def get_account(self, account_id: str) -> dict[str, Any]:
+        return await self.send_command(
+            {"cmd": "get_account", "req_id": str(uuid4()), "account_id": account_id}
+        )
+
+    async def reset(self) -> None:
+        """Stop the engine, delete its event log and snapshots, start fresh."""
+        await self.stop()
+        log = Path(settings.EVENT_LOG_PATH)
+        if log.exists():
+            log.unlink()
+        snapshots = Path(settings.SNAPSHOT_DIR)
+        if snapshots.exists():
+            for f in snapshots.glob("snapshot_*.json"):
+                f.unlink()
+        await self.start()
+
     async def get_book(self, symbol: str, depth: int = 10) -> dict[str, Any]:
         return await self.send_command({"cmd": "get_book", "req_id": str(uuid4()), "symbol": symbol, "depth": depth})
 

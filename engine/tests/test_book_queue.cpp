@@ -59,8 +59,7 @@ TEST_CASE("OrderBook - Removing the last order drops the level", "[orderbook][qu
     REQUIRE(book.level_front(Side::BUY, 99)->order == &b);
 }
 
-TEST_CASE("OrderBook - Fills update level totals and remove filled orders",
-          "[orderbook][queue]") {
+TEST_CASE("OrderBook - Fills update level totals and remove filled orders", "[orderbook][queue]") {
     OrderBook book("BTC-USD");
     Order a = resting(1, Side::SELL, 100, 10);
     Order b = resting(2, Side::SELL, 100, 10);

@@ -3,8 +3,8 @@ Aztec Exchange API - Main Application Entry Point
 """
 
 import time
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,9 +12,10 @@ from fastapi.responses import JSONResponse
 
 from app.config import settings
 from app.engine_client import engine_client
-from app.logging_config import logger, request_id_var, generate_request_id
+from app.logging_config import generate_request_id, logger, request_id_var
+from app.metrics import record_request_latency, set_engine_connected
+from app.metrics import router as metrics_router
 from app.routes import router
-from app.metrics import router as metrics_router, set_engine_connected, record_request_latency
 
 
 @asynccontextmanager

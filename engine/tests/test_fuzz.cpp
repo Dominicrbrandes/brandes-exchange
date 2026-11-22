@@ -1,5 +1,4 @@
 #include <catch2/catch_all.hpp>
-
 #include <random>
 
 #include "exchange/matching_engine.hpp"
@@ -30,7 +29,7 @@ TEST_CASE("Fuzz - Book never crossed", "[fuzz]") {
         order.quantity = qty_dist(rng);
 
         auto result = engine.place_order(order);
-        
+
         if (result.success) {
             successful_orders++;
         } else {
@@ -48,9 +47,9 @@ TEST_CASE("Fuzz - Book never crossed", "[fuzz]") {
             for (const auto* b : book->get_all_bids()) {
                 for (const auto* a : book->get_all_asks()) {
                     if (b->price >= a->price) {
-                        INFO("After order " << i << ": bid=" << b->price << " ("
-                                            << b->account_id << ") ask=" << a->price
-                                            << " (" << a->account_id << ")");
+                        INFO("After order " << i << ": bid=" << b->price << " (" << b->account_id
+                                            << ") ask=" << a->price << " (" << a->account_id
+                                            << ")");
                         REQUIRE(b->account_id == a->account_id);
                     }
                 }
@@ -106,7 +105,8 @@ TEST_CASE("Fuzz - Quantity invariants", "[fuzz]") {
 
         // For successful orders: Filled qty + remaining qty == original qty
         if (result.success) {
-            REQUIRE(result.order.filled_qty() + result.order.remaining_qty == result.order.quantity);
+            REQUIRE(result.order.filled_qty() + result.order.remaining_qty ==
+                    result.order.quantity);
         }
     }
 
@@ -122,7 +122,7 @@ TEST_CASE("Fuzz - Order ID uniqueness", "[fuzz]") {
     std::uniform_int_distribution<int> side_dist(0, 1);
 
     MatchingEngine engine;
-    
+
     uint64_t last_order_id = 0;
     std::set<uint64_t> seen_order_ids;
 
@@ -150,7 +150,7 @@ TEST_CASE("Fuzz - Order ID uniqueness", "[fuzz]") {
 // Property: Trade IDs are always unique and increasing
 TEST_CASE("Fuzz - Trade ID uniqueness", "[fuzz]") {
     MatchingEngine engine;
-    
+
     uint64_t last_trade_id = 0;
     std::set<uint64_t> seen_trade_ids;
 

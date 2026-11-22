@@ -16,12 +16,12 @@ struct RiskCheckResult {
 };
 
 class RiskChecker {
-public:
+   public:
     explicit RiskChecker(RiskLimits limits = {});
     [[nodiscard]] RiskCheckResult check_order(const Order& order) const;
     [[nodiscard]] bool is_valid_symbol(const std::string& symbol) const;
 
-private:
+   private:
     RiskLimits limits_;
 };
 

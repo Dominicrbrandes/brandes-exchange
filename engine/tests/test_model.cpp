@@ -6,7 +6,6 @@
 // the log. That is the property recovery depends on.
 
 #include <catch2/catch_all.hpp>
-
 #include <filesystem>
 #include <map>
 #include <random>
@@ -22,7 +21,7 @@ using namespace exchange::test;
 namespace {
 
 class ScratchDir {
-public:
+   public:
     explicit ScratchDir(const std::string& tag) {
         path_ = std::filesystem::temp_directory_path() /
                 ("bx_" + tag + "_" +
@@ -35,18 +34,19 @@ public:
     }
     std::string file(const std::string& name) const { return (path_ / name).string(); }
 
-private:
+   private:
     std::filesystem::path path_;
 };
 
 // Everything observable about an engine's state, in a comparable form.
 struct State {
-    using OrderRow = std::tuple<uint64_t, std::string, int, int, int, int64_t, int64_t, int64_t,
-                                int, uint64_t>;
+    using OrderRow =
+        std::tuple<uint64_t, std::string, int, int, int, int64_t, int64_t, int64_t, int, uint64_t>;
     std::vector<OrderRow> orders;
     std::vector<uint64_t> bid_queue, ask_queue;  // ids in priority order
     std::vector<std::tuple<int64_t, int64_t, int>> bid_levels, ask_levels;
     std::vector<std::tuple<uint64_t, uint64_t, uint64_t, int64_t, int64_t>> trades;
+    std::vector<std::map<std::string, Position>> positions;  // acct0..acct5
 
     bool operator==(const State&) const = default;
 };
@@ -58,8 +58,8 @@ State capture(MatchingEngine& e, uint64_t max_id) {
         if (!o) continue;
         s.orders.emplace_back(o->id, o->account_id, static_cast<int>(o->side),
                               static_cast<int>(o->type), static_cast<int>(o->time_in_force),
-                              o->price, o->quantity, o->remaining_qty,
-                              static_cast<int>(o->status), o->timestamp_ns);
+                              o->price, o->quantity, o->remaining_qty, static_cast<int>(o->status),
+                              o->timestamp_ns);
     }
     if (auto* book = e.get_book("BTC-USD")) {
         for (const auto* o : book->get_all_bids()) s.bid_queue.push_back(o->id);
@@ -69,6 +69,8 @@ State capture(MatchingEngine& e, uint64_t max_id) {
         for (const auto& l : book->get_ask_levels(1 << 20))
             s.ask_levels.emplace_back(l.price, l.quantity, l.order_count);
     }
+    for (int a = 0; a < 6; ++a)
+        s.positions.push_back(e.get_account("acct" + std::to_string(a)).positions);
     for (const auto& t : e.get_trades("BTC-USD", 1 << 30))
         s.trades.emplace_back(t.id, t.buy_order_id, t.sell_order_id, t.price, t.quantity);
     return s;
@@ -86,8 +88,8 @@ void check_book(MatchingEngine& e, uint64_t max_id) {
 
     // Level totals match the orders queued at each level, levels are strictly
     // ordered best-first, and the queue holds only live GTC limit orders.
-    auto check_side = [&](const std::vector<Order*>& orders,
-                          const std::vector<BookLevel>& levels, bool bids_side) {
+    auto check_side = [&](const std::vector<Order*>& orders, const std::vector<BookLevel>& levels,
+                          bool bids_side) {
         std::map<int64_t, std::pair<int64_t, int>> sums;
         for (const auto* o : orders) {
             REQUIRE(o->type == OrderType::LIMIT);
@@ -157,8 +159,9 @@ struct Driver {
                 o.type = OrderType::MARKET;
                 o.price = 0;
             }
-            o.time_in_force = t < 6 ? TimeInForce::GTC : t < 8 ? TimeInForce::IOC
-                                                               : TimeInForce::FOK;
+            o.time_in_force = t < 6   ? TimeInForce::GTC
+                              : t < 8 ? TimeInForce::IOC
+                                      : TimeInForce::FOK;
             auto r = engine.place_order(o);
             record(r.trades);
             if (r.order.id) ids.push_back(r.order.id);
@@ -177,8 +180,8 @@ struct Driver {
         } else {
             const uint64_t id = ids[static_cast<size_t>(pick(static_cast<int>(ids.size())))];
             const auto before = *engine.get_order(id);
-            auto r = engine.replace_order(id, before.price + range(-2, 2) * PRICE_SCALE,
-                                          range(1, 25));
+            auto r =
+                engine.replace_order(id, before.price + range(-2, 2) * PRICE_SCALE, range(1, 25));
             record(r.trades);
             if (!before.is_active()) REQUIRE_FALSE(r.success);
         }
@@ -271,6 +274,7 @@ TEST_CASE("Model - restart, keep trading, then recover from a snapshot plus the 
     REQUIRE(got.ask_queue == live.ask_queue);
     REQUIRE(got.bid_levels == live.bid_levels);
     REQUIRE(got.ask_levels == live.ask_levels);
+    REQUIRE(got.positions == live.positions);
     for (const auto& row : got.orders) {
         REQUIRE(std::find(live.orders.begin(), live.orders.end(), row) != live.orders.end());
     }

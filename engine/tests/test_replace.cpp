@@ -76,8 +76,7 @@ TEST_CASE("Replace - crossing the spread trades like a new order", "[replace]") 
     REQUIRE(book->best_bid_price() == px(101));
 }
 
-TEST_CASE("Replace - crossing replace that fills completely leaves nothing resting",
-          "[replace]") {
+TEST_CASE("Replace - crossing replace that fills completely leaves nothing resting", "[replace]") {
     MatchingEngine engine;
     engine.place_order(limit("seller", Side::SELL, 101, 20));
     auto buy = engine.place_order(limit("buyer", Side::BUY, 100, 10)).order.id;

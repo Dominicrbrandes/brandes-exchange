@@ -17,9 +17,8 @@ namespace exchange {
 enum class Durability { PerEvent, Buffered };
 
 class EventLog {
-public:
-    explicit EventLog(const std::string& path = "",
-                      Durability durability = Durability::PerEvent);
+   public:
+    explicit EventLog(const std::string& path = "", Durability durability = Durability::PerEvent);
     ~EventLog();
 
     void append(const Event& event);
@@ -39,7 +38,7 @@ public:
     // Lets callers skip building an event payload that would only be discarded.
     [[nodiscard]] bool enabled() const { return enabled_; }
 
-private:
+   private:
     std::string path_;
     std::ofstream file_;
     uint64_t sequence_ = 0;

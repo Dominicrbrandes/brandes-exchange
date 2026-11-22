@@ -27,7 +27,7 @@ namespace exchange {
 // matching engine, and nodes are recycled through a free list so steady-state
 // trading does not allocate.
 class OrderBook {
-public:
+   public:
     struct Level;
 
     // One resting order in a price level's queue. Exposed read-only so the
@@ -98,7 +98,7 @@ public:
     [[nodiscard]] size_t bid_count() const { return bid_orders_; }
     [[nodiscard]] size_t ask_count() const { return ask_orders_; }
 
-private:
+   private:
     std::string symbol_;
 
     // Both sides are ordered best price first.

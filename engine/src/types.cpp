@@ -113,8 +113,10 @@ void from_json(const nlohmann::json& j, Account& a) {
 }
 
 void to_json(nlohmann::json& j, const Event& e) {
-    j = nlohmann::json{
-        {"sequence", e.sequence}, {"timestamp_ns", e.timestamp_ns}, {"type", e.type}, {"payload", e.payload}};
+    j = nlohmann::json{{"sequence", e.sequence},
+                       {"timestamp_ns", e.timestamp_ns},
+                       {"type", e.type},
+                       {"payload", e.payload}};
 }
 
 void from_json(const nlohmann::json& j, Event& e) {
@@ -124,7 +126,9 @@ void from_json(const nlohmann::json& j, Event& e) {
     j.at("payload").get_to(e.payload);
 }
 
-const char* to_string(Side s) { return s == Side::BUY ? "BUY" : "SELL"; }
+const char* to_string(Side s) {
+    return s == Side::BUY ? "BUY" : "SELL";
+}
 
 const char* to_string(OrderType t) {
     return t == OrderType::LIMIT ? "LIMIT" : "MARKET";
@@ -132,32 +136,46 @@ const char* to_string(OrderType t) {
 
 const char* to_string(TimeInForce t) {
     switch (t) {
-        case TimeInForce::GTC: return "GTC";
-        case TimeInForce::IOC: return "IOC";
-        case TimeInForce::FOK: return "FOK";
+        case TimeInForce::GTC:
+            return "GTC";
+        case TimeInForce::IOC:
+            return "IOC";
+        case TimeInForce::FOK:
+            return "FOK";
     }
     return "GTC";
 }
 
 const char* to_string(OrderStatus s) {
     switch (s) {
-        case OrderStatus::NEW: return "NEW";
-        case OrderStatus::PARTIAL: return "PARTIAL";
-        case OrderStatus::FILLED: return "FILLED";
-        case OrderStatus::CANCELLED: return "CANCELLED";
-        case OrderStatus::REJECTED: return "REJECTED";
+        case OrderStatus::NEW:
+            return "NEW";
+        case OrderStatus::PARTIAL:
+            return "PARTIAL";
+        case OrderStatus::FILLED:
+            return "FILLED";
+        case OrderStatus::CANCELLED:
+            return "CANCELLED";
+        case OrderStatus::REJECTED:
+            return "REJECTED";
     }
     return "NEW";
 }
 
 const char* to_string(EventType t) {
     switch (t) {
-        case EventType::ORDER_PLACED: return "ORDER_PLACED";
-        case EventType::ORDER_CANCELLED: return "ORDER_CANCELLED";
-        case EventType::ORDER_REJECTED: return "ORDER_REJECTED";
-        case EventType::TRADE_EXECUTED: return "TRADE_EXECUTED";
-        case EventType::SNAPSHOT_MARKER: return "SNAPSHOT_MARKER";
-        case EventType::ORDER_REPLACED: return "ORDER_REPLACED";
+        case EventType::ORDER_PLACED:
+            return "ORDER_PLACED";
+        case EventType::ORDER_CANCELLED:
+            return "ORDER_CANCELLED";
+        case EventType::ORDER_REJECTED:
+            return "ORDER_REJECTED";
+        case EventType::TRADE_EXECUTED:
+            return "TRADE_EXECUTED";
+        case EventType::SNAPSHOT_MARKER:
+            return "SNAPSHOT_MARKER";
+        case EventType::ORDER_REPLACED:
+            return "ORDER_REPLACED";
     }
     return "ORDER_PLACED";
 }
@@ -166,14 +184,14 @@ namespace {
 
 void append_int(std::string& out, int64_t v) {
     char buf[24];
-    out.append(buf, static_cast<size_t>(std::snprintf(buf, sizeof(buf), "%lld",
-                                                      static_cast<long long>(v))));
+    out.append(buf, static_cast<size_t>(
+                        std::snprintf(buf, sizeof(buf), "%lld", static_cast<long long>(v))));
 }
 
 void append_uint(std::string& out, uint64_t v) {
     char buf[24];
-    out.append(buf, static_cast<size_t>(std::snprintf(
-                        buf, sizeof(buf), "%llu", static_cast<unsigned long long>(v))));
+    out.append(buf, static_cast<size_t>(std::snprintf(buf, sizeof(buf), "%llu",
+                                                      static_cast<unsigned long long>(v))));
 }
 
 // Account ids, symbols and client ids are operator- or client-supplied, so they
@@ -182,11 +200,21 @@ void append_escaped(std::string& out, const std::string& s) {
     out += '"';
     for (char c : s) {
         switch (c) {
-            case '"': out += "\\\""; break;
-            case '\\': out += "\\\\"; break;
-            case '\n': out += "\\n"; break;
-            case '\r': out += "\\r"; break;
-            case '\t': out += "\\t"; break;
+            case '"':
+                out += "\\\"";
+                break;
+            case '\\':
+                out += "\\\\";
+                break;
+            case '\n':
+                out += "\\n";
+                break;
+            case '\r':
+                out += "\\r";
+                break;
+            case '\t':
+                out += "\\t";
+                break;
             default:
                 if (static_cast<unsigned char>(c) < 0x20) {
                     char buf[8];
@@ -210,25 +238,35 @@ void append_key(std::string& out, const char* key) {
 
 void append_json(std::string& out, const Order& o) {
     out += '{';
-    append_key(out, "id");            append_uint(out, o.id);
+    append_key(out, "id");
+    append_uint(out, o.id);
     out += ',';
-    append_key(out, "account_id");    append_escaped(out, o.account_id);
+    append_key(out, "account_id");
+    append_escaped(out, o.account_id);
     out += ',';
-    append_key(out, "symbol");        append_escaped(out, o.symbol);
+    append_key(out, "symbol");
+    append_escaped(out, o.symbol);
     out += ',';
-    append_key(out, "side");          append_escaped(out, to_string(o.side));
+    append_key(out, "side");
+    append_escaped(out, to_string(o.side));
     out += ',';
-    append_key(out, "type");          append_escaped(out, to_string(o.type));
+    append_key(out, "type");
+    append_escaped(out, to_string(o.type));
     out += ',';
-    append_key(out, "price");         append_int(out, o.price);
+    append_key(out, "price");
+    append_int(out, o.price);
     out += ',';
-    append_key(out, "quantity");      append_int(out, o.quantity);
+    append_key(out, "quantity");
+    append_int(out, o.quantity);
     out += ',';
-    append_key(out, "remaining_qty"); append_int(out, o.remaining_qty);
+    append_key(out, "remaining_qty");
+    append_int(out, o.remaining_qty);
     out += ',';
-    append_key(out, "timestamp_ns");  append_uint(out, o.timestamp_ns);
+    append_key(out, "timestamp_ns");
+    append_uint(out, o.timestamp_ns);
     out += ',';
-    append_key(out, "status");        append_escaped(out, to_string(o.status));
+    append_key(out, "status");
+    append_escaped(out, to_string(o.status));
     if (o.time_in_force != TimeInForce::GTC) {
         out += ',';
         append_key(out, "time_in_force");
@@ -249,28 +287,55 @@ void append_json(std::string& out, const Order& o) {
 
 void append_json(std::string& out, const Trade& t) {
     out += '{';
-    append_key(out, "id");                 append_uint(out, t.id);
+    append_key(out, "id");
+    append_uint(out, t.id);
     out += ',';
-    append_key(out, "buy_order_id");       append_uint(out, t.buy_order_id);
+    append_key(out, "buy_order_id");
+    append_uint(out, t.buy_order_id);
     out += ',';
-    append_key(out, "sell_order_id");      append_uint(out, t.sell_order_id);
+    append_key(out, "sell_order_id");
+    append_uint(out, t.sell_order_id);
     out += ',';
-    append_key(out, "symbol");             append_escaped(out, t.symbol);
+    append_key(out, "symbol");
+    append_escaped(out, t.symbol);
     out += ',';
-    append_key(out, "price");              append_int(out, t.price);
+    append_key(out, "price");
+    append_int(out, t.price);
     out += ',';
-    append_key(out, "quantity");           append_int(out, t.quantity);
+    append_key(out, "quantity");
+    append_int(out, t.quantity);
     out += ',';
-    append_key(out, "timestamp_ns");       append_uint(out, t.timestamp_ns);
+    append_key(out, "timestamp_ns");
+    append_uint(out, t.timestamp_ns);
     out += ',';
-    append_key(out, "buyer_account_id");   append_escaped(out, t.buyer_account_id);
+    append_key(out, "buyer_account_id");
+    append_escaped(out, t.buyer_account_id);
     out += ',';
-    append_key(out, "seller_account_id");  append_escaped(out, t.seller_account_id);
+    append_key(out, "seller_account_id");
+    append_escaped(out, t.seller_account_id);
     out += '}';
 }
 
 void to_json(nlohmann::json& j, const BookLevel& l) {
-    j = nlohmann::json{{"price", l.price}, {"quantity", l.quantity}, {"order_count", l.order_count}};
+    j = nlohmann::json{
+        {"price", l.price}, {"quantity", l.quantity}, {"order_count", l.order_count}};
+}
+
+void to_json(nlohmann::json& j, const Position& p) {
+    j = nlohmann::json{{"base", p.base}, {"quote", p.quote}};
+}
+
+void from_json(const nlohmann::json& j, Position& p) {
+    j.at("base").get_to(p.base);
+    j.at("quote").get_to(p.quote);
+}
+
+int64_t notional(int64_t price, int64_t quantity) {
+#if defined(__SIZEOF_INT128__)
+    return static_cast<int64_t>(static_cast<__int128>(price) * quantity / PRICE_SCALE);
+#else
+    return static_cast<int64_t>(static_cast<long double>(price) * quantity / PRICE_SCALE);
+#endif
 }
 
 std::string error_message(ErrorCode code) {

@@ -31,6 +31,8 @@ inline Order market(const std::string& account, Side side, int64_t qty,
     return o;
 }
 
-inline int64_t px(int64_t whole) { return whole * PRICE_SCALE; }
+inline int64_t px(int64_t whole) {
+    return whole * PRICE_SCALE;
+}
 
 }  // namespace exchange::test

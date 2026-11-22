@@ -1,31 +1,35 @@
 """API routes for the exchange."""
 
 import time
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
-from app.auth import verify_api_key
+from app.auth import verify_admin_key, verify_api_key
+from app.config import settings
 from app.engine_client import engine_client
 from app.logging_config import generate_request_id, logger, request_id_var
+from app.metrics import (
+    record_order,
+    record_order_latency,
+    record_order_rejected,
+    record_trade,
+    set_book_depth,
+    set_engine_connected,
+)
 from app.models import (
+    BalanceResponse,
     BookLevel,
     HealthResponse,
     Order,
     OrderBookResponse,
     PlaceOrderRequest,
     PlaceOrderResponse,
+    ReplaceOrderRequest,
     StatsResponse,
     Trade,
     TradesResponse,
 )
 from app.rate_limit import rate_limit_dependency
-from app.metrics import (
-    record_order,
-    record_order_rejected,
-    record_trade,
-    record_order_latency,
-    set_engine_connected,
-    set_book_depth,
-)
 
 router = APIRouter()
 
@@ -76,6 +80,7 @@ async def place_order(
         "type": order.type.value,
         "price": order.price,
         "quantity": order.quantity,
+        "time_in_force": order.time_in_force.value,
     }
     
     if order.idempotency_key is not None:
@@ -170,6 +175,99 @@ async def cancel_order(
     return Order(**result["data"]["order"])
 
 
+@router.patch(
+    "/orders/{order_id}",
+    response_model=PlaceOrderResponse,
+    summary="Cancel/replace an order",
+    description=(
+        "Change a resting order's price and total quantity under the same order id. "
+        "It keeps its queue position only if the price is unchanged and the quantity "
+        "does not grow; a new price that crosses the book trades immediately."
+    ),
+    responses={
+        200: {"description": "Order replaced"},
+        400: {"description": "Replace rejected (not live, or invalid price or quantity)"},
+        401: {"description": "Invalid API key"},
+        429: {"description": "Rate limit exceeded"},
+    },
+)
+async def replace_order(
+    order_id: int,
+    body: ReplaceOrderRequest,
+    _api_key: str = Depends(verify_api_key),
+    _rate_limit: None = Depends(rate_limit_dependency),
+    req_id: str = Depends(set_request_id),
+) -> PlaceOrderResponse:
+    """Cancel/replace an order."""
+    result = await engine_client.replace_order(order_id, body.price, body.quantity)
+    if not result.get("success"):
+        error = result.get("error", {})
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"{error.get('code', 'UNKNOWN_ERROR')}: {error.get('message', 'Replace failed')}",
+        )
+    data = result["data"]
+    return PlaceOrderResponse(
+        order=Order(**data["order"]), trades=[Trade(**t) for t in data.get("trades", [])]
+    )
+
+
+@router.get(
+    "/accounts/{account_id}/balances",
+    response_model=BalanceResponse,
+    summary="Get demo balances",
+    description=(
+        "A demo starting grant adjusted by the account's fills, with funds held by "
+        "resting orders shown as reserved. BTC-USD only; display only, not enforced."
+    ),
+)
+async def get_balances(
+    account_id: str,
+    _api_key: str = Depends(verify_api_key),
+    req_id: str = Depends(set_request_id),
+) -> BalanceResponse:
+    """Balances derived from the engine's positions and open orders."""
+    result = await engine_client.get_account(account_id)
+    if not result.get("success"):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve account",
+        )
+    data = result["data"]
+    position = data.get("positions", {}).get("BTC-USD", {"base": 0, "quote": 0})
+    scale = 100_000_000
+    usd_reserved = 0
+    btc_reserved = 0
+    for o in data.get("open_orders", []):
+        if o["symbol"] != "BTC-USD":
+            continue
+        if o["side"] == "BUY":
+            usd_reserved += o["price"] * o["remaining_qty"] // scale
+        else:
+            btc_reserved += o["remaining_qty"]
+    return BalanceResponse(
+        usd=settings.DEMO_USD * scale + position["quote"] - usd_reserved,
+        btc=settings.DEMO_BTC * scale + position["base"] - btc_reserved,
+        usd_reserved=usd_reserved,
+        btc_reserved=btc_reserved,
+    )
+
+
+@router.post(
+    "/admin/reset",
+    summary="Reset the exchange",
+    description="Restart the engine with an empty event log. Requires an admin key.",
+)
+async def reset_exchange(
+    _admin_key: str = Depends(verify_admin_key),
+    req_id: str = Depends(set_request_id),
+) -> dict[str, bool]:
+    """Wipe all state and restart the engine."""
+    logger.warning("Resetting exchange state")
+    await engine_client.reset()
+    return {"ok": True}
+
+
 # =============================================================================
 # Market Data Endpoints (Public)
 # =============================================================================
@@ -199,8 +297,8 @@ async def get_book(
         )
 
     data = result["data"]
-    bids = [BookLevel(**l) for l in data.get("bids", [])]
-    asks = [BookLevel(**l) for l in data.get("asks", [])]
+    bids = [BookLevel(**level) for level in data.get("bids", [])]
+    asks = [BookLevel(**level) for level in data.get("asks", [])]
     
     # Update metrics
     set_book_depth(symbol, len(bids), len(asks))

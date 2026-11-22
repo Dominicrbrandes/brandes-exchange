@@ -105,6 +105,20 @@ class Settings:
         "aztec-demo-key",
     }
     
+    # Admin keys may reset the exchange. Override with ADMIN_API_KEYS=a,b
+    @property
+    def ADMIN_API_KEYS(self) -> set[str]:
+        return {k for k in os.getenv("ADMIN_API_KEYS", "admin-key-1").split(",") if k}
+
+    # Demo starting balances (whole units), used only for display
+    @property
+    def DEMO_USD(self) -> int:
+        return int(os.getenv("DEMO_USD", "100000"))
+
+    @property
+    def DEMO_BTC(self) -> int:
+        return int(os.getenv("DEMO_BTC", "10"))
+
     # Server settings
     @property
     def HOST(self) -> str:

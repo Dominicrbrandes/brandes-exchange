@@ -1,7 +1,6 @@
 #include <iostream>
-#include <string>
-
 #include <nlohmann/json.hpp>
+#include <string>
 
 #include "exchange/matching_engine.hpp"
 #include "exchange/protocol.hpp"
@@ -12,12 +11,14 @@ int main(int argc, char* argv[]) {
 
     for (int i = 1; i < argc; ++i) {
         std::string a = argv[i];
-        if (a == "--event-log" && i + 1 < argc) event_log = argv[++i];
-        else if (a == "--snapshot-dir" && i + 1 < argc) snapshot_dir = argv[++i];
+        if (a == "--event-log" && i + 1 < argc)
+            event_log = argv[++i];
+        else if (a == "--snapshot-dir" && i + 1 < argc)
+            snapshot_dir = argv[++i];
     }
 
     exchange::MatchingEngine engine(event_log, snapshot_dir);
-    
+
     if (engine.recover()) {
         std::cerr << "[ENGINE] Recovered from existing state" << std::endl;
     } else {
@@ -31,7 +32,7 @@ int main(int argc, char* argv[]) {
     std::string line;
     while (std::getline(std::cin, line)) {
         if (line.empty()) continue;
-        
+
         std::string response = handler.handle(line);
         std::cout << response << std::endl;
         std::cout.flush();

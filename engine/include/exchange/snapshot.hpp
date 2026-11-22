@@ -1,5 +1,6 @@
 #pragma once
 
+#include <map>
 #include <optional>
 #include <string>
 #include <vector>
@@ -18,20 +19,22 @@ struct Snapshot {
     // finished and so are not in `orders`. Without them a client retry after a
     // restart could place the same order twice.
     std::vector<std::string> idempotency_keys;
+    // account -> symbol -> position
+    std::map<std::string, std::map<std::string, Position>> positions;
 };
 
 void to_json(nlohmann::json& j, const Snapshot& s);
 void from_json(const nlohmann::json& j, Snapshot& s);
 
 class SnapshotManager {
-public:
+   public:
     explicit SnapshotManager(const std::string& path = "", uint64_t interval = 1000);
 
     [[nodiscard]] bool should_snapshot(uint64_t current_sequence) const;
     void save(const Snapshot& snapshot);
     [[nodiscard]] std::optional<Snapshot> load_latest() const;
 
-private:
+   private:
     std::string path_;
     uint64_t interval_;
     uint64_t last_snapshot_seq_ = 0;

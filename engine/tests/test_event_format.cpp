@@ -1,5 +1,4 @@
 #include <catch2/catch_all.hpp>
-
 #include <nlohmann/json.hpp>
 
 #include "exchange/types.hpp"

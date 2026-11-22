@@ -36,13 +36,12 @@ void EventLog::append(const Event& event) {
     }
 }
 
-void EventLog::append_preformatted(uint64_t sequence, uint64_t timestamp_ns,
-                                   EventType type, const std::string& payload_json) {
+void EventLog::append_preformatted(uint64_t sequence, uint64_t timestamp_ns, EventType type,
+                                   const std::string& payload_json) {
     if (!enabled_) return;
     std::lock_guard<std::mutex> lock(mutex_);
-    file_ << "{\"sequence\":" << sequence << ",\"timestamp_ns\":" << timestamp_ns
-          << ",\"type\":\"" << to_string(type) << "\",\"payload\":" << payload_json
-          << "}\n";
+    file_ << "{\"sequence\":" << sequence << ",\"timestamp_ns\":" << timestamp_ns << ",\"type\":\""
+          << to_string(type) << "\",\"payload\":" << payload_json << "}\n";
     if (durability_ == Durability::PerEvent) {
         file_.flush();
     }
@@ -70,7 +69,8 @@ std::vector<Event> EventLog::read_from(uint64_t start_sequence) const {
             auto j = nlohmann::json::parse(line);
             Event e = j.get<Event>();
             if (e.sequence >= start_sequence) events.push_back(e);
-        } catch (...) {}
+        } catch (...) {
+        }
     }
     return events;
 }

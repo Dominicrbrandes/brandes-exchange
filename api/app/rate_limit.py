@@ -3,7 +3,6 @@
 import time
 from collections import defaultdict
 from dataclasses import dataclass
-from typing import Callable
 
 from fastapi import HTTPException, Request, status
 

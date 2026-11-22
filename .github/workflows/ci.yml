@@ -7,58 +7,91 @@ on:
     branches: [main]
 
 jobs:
-  build-and-test:
-    runs-on: ubuntu-latest
-    
+  engine:
+    name: Engine tests (ASan + UBSan)
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Install dependencies
+      - name: Build
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake g++ python3 python3-pip python3-venv
-      
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON -DBUILD_BENCHMARKS=ON \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer -fno-sanitize-recover=all"
+          cmake --build build -j"$(nproc)"
+      - name: Test
+        run: ctest --test-dir build --output-on-failure -j"$(nproc)"
+
+  coverage:
+    name: Coverage (100% lines on matching code)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install LLVM tools
+        run: sudo apt-get update && sudo apt-get install -y llvm-18
+      - name: Build with coverage
+        env:
+          CC: clang-18
+          CXX: clang++-18
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON \
+            -DCMAKE_CXX_FLAGS="-fprofile-instr-generate -fcoverage-mapping"
+          cmake --build build -j"$(nproc)"
+      - name: Run tests and check coverage
+        run: |
+          mkdir -p prof
+          LLVM_PROFILE_FILE="$PWD/prof/%p.profraw" ./build/engine/tests/exchange_tests
+          llvm-profdata-18 merge -sparse prof/*.profraw -o tests.profdata
+          llvm-cov-18 report ./build/engine/tests/exchange_tests -instr-profile=tests.profdata engine/src/*.cpp
+          llvm-cov-18 export ./build/engine/tests/exchange_tests -instr-profile=tests.profdata \
+            -summary-only engine/src/matching_engine.cpp engine/src/order_book.cpp > summary.json
+          python3 - <<'EOF'
+          import json, sys
+          files = json.load(open("summary.json"))["data"][0]["files"]
+          bad = [(f["filename"], f["summary"]["lines"]["percent"]) for f in files
+                 if f["summary"]["lines"]["percent"] < 100.0]
+          for name, pct in bad:
+              print(f"{name}: {pct:.2f}% lines covered")
+          sys.exit(1 if bad else 0)
+          EOF
+
+  api:
+    name: API tests against the real engine
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
       - name: Build engine
         run: |
-          mkdir -p build
-          cd build
-          cmake -DCMAKE_BUILD_TYPE=Debug -DBUILD_TESTS=ON ..
-          make -j$(nproc)
-      
-      - name: Run engine tests
-        run: |
-          cd build
-          ctest --output-on-failure
-      
-      - name: Setup Python
-        uses: actions/setup-python@v5
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTS=OFF
+          cmake --build build -j"$(nproc)" --target exchange_engine
+      - uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-      
-      - name: Install Python dependencies
-        run: |
-          cd api
-          pip install -r requirements.txt
-          pip install pytest pytest-asyncio httpx
-      
-      - name: Run API tests
-        run: |
-          cd api
-          python -m pytest tests/ -v
+          python-version: "3.12"
+      - name: Install
+        run: pip install -r api/requirements.txt
+      - name: Lint
+        run: cd api && ruff check .
+      - name: Test
         env:
           ENGINE_PATH: ${{ github.workspace }}/build/engine/exchange_engine
+        run: cd api && python -m pytest tests -v
 
-  lint:
-    runs-on: ubuntu-latest
+  ui:
+    name: UI type check and build
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      
-      - name: Check C++ formatting
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build
+        run: cd ui && npm ci && npm run build
+
+  format:
+    name: C++ format
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: clang-format
         run: |
-          sudo apt-get install -y clang-format
-          find engine/src engine/include -name '*.cpp' -o -name '*.hpp' | xargs clang-format --dry-run -Werror
-      
-      - name: Check Python formatting
-        run: |
-          pip install ruff
-          cd api && ruff check .
+          sudo apt-get update && sudo apt-get install -y clang-format-18
+          find engine/src engine/include engine/tests benchmarks \( -name '*.cpp' -o -name '*.hpp' \) \
+            -not -path '*/nlohmann/*' -print0 | xargs -0 clang-format-18 --dry-run -Werror

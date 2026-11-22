@@ -13,6 +13,7 @@ add_executable(exchange_tests
     test_model.cpp
     test_protocol.cpp
     test_recovery.cpp
+    test_account.cpp
 )
 
 target_link_libraries(exchange_tests PRIVATE

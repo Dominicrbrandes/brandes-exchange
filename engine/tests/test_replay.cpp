@@ -7,25 +7,26 @@
 using namespace exchange;
 
 class TempDir {
-public:
+   public:
     TempDir() {
         // Create a unique temp directory
         auto temp_base = std::filesystem::temp_directory_path();
-        std::string unique_name = "aztec_test_" + std::to_string(
-            std::chrono::high_resolution_clock::now().time_since_epoch().count());
+        std::string unique_name =
+            "aztec_test_" +
+            std::to_string(std::chrono::high_resolution_clock::now().time_since_epoch().count());
         path_ = temp_base / unique_name;
         std::filesystem::create_directories(path_);
     }
-    
+
     ~TempDir() {
         std::error_code ec;
         std::filesystem::remove_all(path_, ec);
         // Ignore errors on cleanup
     }
-    
+
     std::string path() const { return path_.string(); }
 
-private:
+   private:
     std::filesystem::path path_;
 };
 
@@ -35,7 +36,7 @@ TEST_CASE("Replay - Deterministic state recovery", "[replay]") {
     std::string snapshot_dir = temp.path() + "/snapshots";
 
     uint64_t sell_order_id = 0;
-    
+
     // Phase 1: Create state
     {
         MatchingEngine engine(event_log, snapshot_dir, 100);
@@ -63,7 +64,7 @@ TEST_CASE("Replay - Deterministic state recovery", "[replay]") {
         REQUIRE(buy_result.trades.size() == 1);
         REQUIRE(buy_result.trades[0].quantity == 60);
     }
-    
+
     // Verify event log was written
     {
         std::ifstream file(event_log);
@@ -102,7 +103,7 @@ TEST_CASE("Replay - Golden test vector", "[replay]") {
 
     std::vector<Order> orders;
     orders.reserve(3);
-    
+
     Order o1;
     o1.account_id = "A";
     o1.symbol = "BTC-USD";
@@ -114,7 +115,7 @@ TEST_CASE("Replay - Golden test vector", "[replay]") {
 
     Order o2;
     o2.account_id = "B";
-        o2.symbol = "BTC-USD";
+    o2.symbol = "BTC-USD";
     o2.side = Side::SELL;
     o2.type = OrderType::LIMIT;
     o2.price = 110 * PRICE_SCALE;
@@ -129,7 +130,6 @@ TEST_CASE("Replay - Golden test vector", "[replay]") {
     o3.price = 105 * PRICE_SCALE;
     o3.quantity = 60;
     orders.push_back(o3);
-
 
     std::vector<PlaceOrderResult> results;
     for (auto& order : orders) {
@@ -152,7 +152,7 @@ TEST_CASE("Replay - Golden test vector", "[replay]") {
     // Buy order should have 10 remaining on book
     REQUIRE(results[2].order.remaining_qty == 10);
     // Status could be PARTIAL or NEW depending on implementation
-    REQUIRE((results[2].order.status == OrderStatus::PARTIAL || 
+    REQUIRE((results[2].order.status == OrderStatus::PARTIAL ||
              results[2].order.status == OrderStatus::NEW));
 }
 
@@ -160,9 +160,9 @@ TEST_CASE("Replay - Empty event log returns false", "[replay]") {
     TempDir temp;
     std::string event_log = temp.path() + "/empty_events.jsonl";
     std::string snapshot_dir = temp.path() + "/empty_snapshots";
-    
+
     MatchingEngine engine(event_log, snapshot_dir, 100);
-    
+
     // With no events and no snapshot, recover should return false
     REQUIRE_FALSE(engine.recover());
 }

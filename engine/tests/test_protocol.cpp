@@ -8,10 +8,12 @@ using nlohmann::json;
 
 namespace {
 
-json send(ProtocolHandler& h, const json& cmd) { return json::parse(h.handle(cmd.dump())); }
+json send(ProtocolHandler& h, const json& cmd) {
+    return json::parse(h.handle(cmd.dump()));
+}
 
-json order_cmd(const std::string& account, const std::string& side, int64_t price,
-               int64_t qty, const std::string& tif = "GTC") {
+json order_cmd(const std::string& account, const std::string& side, int64_t price, int64_t qty,
+               const std::string& tif = "GTC") {
     return {{"cmd", "place_order"},
             {"order",
              {{"account_id", account},
@@ -41,10 +43,8 @@ TEST_CASE("Protocol - place, replace and cancel through JSON commands", "[protoc
     REQUIRE(replaced["data"]["order"]["price"] == 101 * PRICE_SCALE);
     REQUIRE(replaced["data"]["trades"].empty());
 
-    auto bad = send(h, {{"cmd", "replace_order"},
-                        {"order_id", 999},
-                        {"price", PRICE_SCALE},
-                        {"quantity", 1}});
+    auto bad = send(
+        h, {{"cmd", "replace_order"}, {"order_id", 999}, {"price", PRICE_SCALE}, {"quantity", 1}});
     REQUIRE(bad["success"] == false);
     REQUIRE(bad["error"]["code"] == "ORDER_NOT_FOUND");
 

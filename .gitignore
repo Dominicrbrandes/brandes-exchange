@@ -27,3 +27,12 @@ data/
 # OS
 .DS_Store
 Thumbs.db
+
+# Node
+node_modules/
+dist/
+
+# Benchmarks and coverage
+bench_events.jsonl
+*.profraw
+*.profdata

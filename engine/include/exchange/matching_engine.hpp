@@ -1,6 +1,7 @@
 #pragma once
 
 #include <deque>
+#include <map>
 #include <memory>
 #include <unordered_map>
 #include <unordered_set>
@@ -28,6 +29,19 @@ struct ReplaceOrderResult {
     std::vector<Trade> trades;  // non-empty when the new price crossed the book
 };
 
+// What the API needs to show one account: positions from its fills and the
+// orders it still has resting.
+struct AccountView {
+    std::string account_id;
+    std::map<std::string, Position> positions;  // by symbol
+    std::vector<Order> open_orders;             // in book priority order
+};
+
+inline void to_json(nlohmann::json& j, const AccountView& a) {
+    j = nlohmann::json{
+        {"account_id", a.account_id}, {"positions", a.positions}, {"open_orders", a.open_orders}};
+}
+
 struct CancelOrderResult {
     bool success = false;
     ErrorCode error_code = ErrorCode::ORDER_NOT_FOUND;
@@ -46,23 +60,16 @@ struct EngineStats {
 
 // JSON serialization for EngineStats
 inline void to_json(nlohmann::json& j, const EngineStats& s) {
-    j = nlohmann::json{
-        {"total_orders", s.total_orders},
-        {"total_trades", s.total_trades},
-        {"total_cancels", s.total_cancels},
-        {"total_rejects", s.total_rejects},
-        {"total_replaces", s.total_replaces},
-        {"total_expired", s.total_expired},
-        {"event_sequence", s.event_sequence}
-    };
+    j = nlohmann::json{{"total_orders", s.total_orders},     {"total_trades", s.total_trades},
+                       {"total_cancels", s.total_cancels},   {"total_rejects", s.total_rejects},
+                       {"total_replaces", s.total_replaces}, {"total_expired", s.total_expired},
+                       {"event_sequence", s.event_sequence}};
 }
 
 class MatchingEngine {
-public:
-    MatchingEngine(const std::string& event_log_path = "",
-                   const std::string& snapshot_path = "",
-                   uint64_t snapshot_interval = 1000,
-                   Durability durability = Durability::PerEvent);
+   public:
+    MatchingEngine(const std::string& event_log_path = "", const std::string& snapshot_path = "",
+                   uint64_t snapshot_interval = 1000, Durability durability = Durability::PerEvent);
 
     PlaceOrderResult place_order(Order order);
     CancelOrderResult cancel_order(uint64_t order_id);
@@ -74,7 +81,7 @@ public:
     // if the new price crosses the book it trades first, like a new order.
     ReplaceOrderResult replace_order(uint64_t order_id, int64_t new_price, int64_t new_quantity);
     bool recover();
-    
+
     // Snapshot support
     Snapshot create_snapshot() const;
     void replay_events(const std::vector<Event>& events);
@@ -83,8 +90,9 @@ public:
     [[nodiscard]] std::optional<Order> get_order(uint64_t order_id) const;
     [[nodiscard]] std::vector<Trade> get_trades(const std::string& symbol, size_t limit) const;
     [[nodiscard]] EngineStats get_stats() const;
+    [[nodiscard]] AccountView get_account(const std::string& account_id) const;
 
-private:
+   private:
     std::unordered_map<std::string, std::unique_ptr<OrderBook>> books_;
     std::unordered_map<uint64_t, std::unique_ptr<Order>> orders_;
     // A deque rather than a vector: this holds every trade for the life of the
@@ -92,6 +100,7 @@ private:
     // unpredictable moments, producing multi-millisecond latency spikes.
     std::deque<Trade> trades_;
     std::unordered_set<std::string> idempotency_keys_;
+    std::unordered_map<std::string, std::map<std::string, Position>> positions_;
 
     uint64_t next_order_id_ = 1;
     uint64_t next_trade_id_ = 1;
@@ -99,7 +108,7 @@ private:
     EventLog event_log_;
     SnapshotManager snapshot_manager_;
     RiskChecker risk_checker_;
-    
+
     // Statistics tracking
     EngineStats stats_;
 
@@ -118,6 +127,9 @@ private:
     // Replay helper: applies a fill to one side of a logged trade, going
     // through the book when the order is resting so level totals stay right.
     void apply_fill(uint64_t order_id, int64_t qty);
+
+    // Updates both accounts' positions for one trade.
+    void record_position(const Trade& t);
 
     // Templated so the payload is only converted to JSON when the log is
     // actually enabled. Taking nlohmann::json by reference meant every caller

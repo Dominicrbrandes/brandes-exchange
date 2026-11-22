@@ -7,11 +7,11 @@
 namespace exchange {
 
 class ProtocolHandler {
-public:
+   public:
     explicit ProtocolHandler(MatchingEngine& engine);
     [[nodiscard]] std::string handle(const std::string& json);
 
-private:
+   private:
     MatchingEngine& engine_;
 };
 

@@ -3,25 +3,23 @@
 
 #include <algorithm>
 #include <memory>
+#include <nlohmann/json.hpp>
 #include <utility>
 
-#include <nlohmann/json.hpp>
-
-#include "exchange/types.hpp"
 #include "exchange/order_book.hpp"
+#include "exchange/types.hpp"
 
 namespace exchange {
 
-MatchingEngine::MatchingEngine(const std::string& event_log_path,
-                               const std::string& snapshot_path,
-                               uint64_t snapshot_interval,
-                               Durability durability)
-    : event_log_(event_log_path, durability),
-      snapshot_manager_(snapshot_path, snapshot_interval) {}
+MatchingEngine::MatchingEngine(const std::string& event_log_path, const std::string& snapshot_path,
+                               uint64_t snapshot_interval, Durability durability)
+    : event_log_(event_log_path, durability), snapshot_manager_(snapshot_path, snapshot_interval) {}
 
 namespace {
 
-Side opposite(Side s) { return s == Side::BUY ? Side::SELL : Side::BUY; }
+Side opposite(Side s) {
+    return s == Side::BUY ? Side::SELL : Side::BUY;
+}
 
 // Whether an incoming order is willing to trade at a resting price level.
 bool price_acceptable(const Order& incoming, int64_t level_price) {
@@ -40,8 +38,7 @@ PlaceOrderResult MatchingEngine::place_order(Order order) {
     PlaceOrderResult r;
 
     // idempotency check
-    if (!order.idempotency_key.empty() &&
-        idempotency_keys_.count(order.idempotency_key)) {
+    if (!order.idempotency_key.empty() && idempotency_keys_.count(order.idempotency_key)) {
         r.success = false;
         r.error_code = ErrorCode::DUPLICATE_IDEMPOTENCY_KEY;
         stats_.total_rejects++;
@@ -170,6 +167,7 @@ std::vector<Trade> MatchingEngine::match(Order* incoming) {
 
             trades.push_back(t);
             trades_.push_back(t);
+            record_position(t);
             log_event(EventType::TRADE_EXECUTED, t);
             stats_.total_trades++;
 
@@ -288,13 +286,12 @@ ReplaceOrderResult MatchingEngine::replace_order(uint64_t order_id, int64_t new_
         o.timestamp_ns = now_ns();
     }
 
-    log_event(EventType::ORDER_REPLACED,
-              nlohmann::json{{"order_id", o.id},
-                             {"price", o.price},
-                             {"quantity", o.quantity},
-                             {"remaining_qty", o.remaining_qty},
-                             {"timestamp_ns", o.timestamp_ns},
-                             {"keeps_priority", keeps_priority}});
+    log_event(EventType::ORDER_REPLACED, nlohmann::json{{"order_id", o.id},
+                                                        {"price", o.price},
+                                                        {"quantity", o.quantity},
+                                                        {"remaining_qty", o.remaining_qty},
+                                                        {"timestamp_ns", o.timestamp_ns},
+                                                        {"keeps_priority", keeps_priority}});
     stats_.total_replaces++;
 
     if (!keeps_priority) {
@@ -358,7 +355,7 @@ EngineStats MatchingEngine::get_stats() const {
 bool MatchingEngine::recover() {
     // First, try to load from snapshot
     auto snap = snapshot_manager_.load_latest();
-    
+
     if (snap) {
         // Restore from snapshot
         orders_.clear();
@@ -368,41 +365,45 @@ bool MatchingEngine::recover() {
         for (const auto& o : snap->orders) {
             auto ptr = std::make_unique<Order>(o);
             Order* raw = ptr.get();
-            
+
             // Only add active orders to the book
             if (o.status == OrderStatus::NEW || o.status == OrderStatus::PARTIAL) {
                 if (o.remaining_qty > 0 && o.type == OrderType::LIMIT) {
                     get_or_create_book(o.symbol).add_order(raw);
                 }
             }
-            
+
             // Track idempotency keys
             if (!o.idempotency_key.empty()) {
                 idempotency_keys_.insert(o.idempotency_key);
             }
-            
+
             orders_[o.id] = std::move(ptr);
         }
 
         for (const auto& key : snap->idempotency_keys) idempotency_keys_.insert(key);
+        positions_.clear();
+        for (const auto& [account, by_symbol] : snap->positions) {
+            positions_[account] = by_symbol;
+        }
 
         next_order_id_ = snap->next_order_id;
         next_trade_id_ = snap->next_trade_id;
-        
+
         // Now replay any events after the snapshot
         auto events = event_log_.read_from(snap->sequence + 1);
         replay_events(events);
-        
+
         return true;
     }
-    
+
     // No snapshot - try to replay from event log only
     auto events = event_log_.read_all();
     if (!events.empty()) {
         replay_events(events);
         return true;
     }
-    
+
     // Nothing to recover from
     return false;
 }
@@ -412,34 +413,34 @@ void MatchingEngine::replay_events(const std::vector<Event>& events) {
         switch (event.type) {
             case EventType::ORDER_PLACED: {
                 Order order = order_from_persisted(event.payload);
-                
+
                 // Check if order already exists (from snapshot)
                 if (orders_.find(order.id) != orders_.end()) {
                     continue;  // Skip, already loaded from snapshot
                 }
-                
+
                 // Store the order
                 auto ptr = std::make_unique<Order>(order);
                 Order* raw = ptr.get();
-                
+
                 // Add to book if active limit order with remaining qty
                 if ((order.status == OrderStatus::NEW || order.status == OrderStatus::PARTIAL) &&
                     order.type == OrderType::LIMIT && order.remaining_qty > 0) {
                     get_or_create_book(order.symbol).add_order(raw);
                 }
-                
+
                 if (!order.idempotency_key.empty()) {
                     idempotency_keys_.insert(order.idempotency_key);
                 }
-                
+
                 orders_[order.id] = std::move(ptr);
-                
+
                 if (order.id >= next_order_id_) {
                     next_order_id_ = order.id + 1;
                 }
                 break;
             }
-            
+
             case EventType::ORDER_CANCELLED:
             case EventType::ORDER_REJECTED: {
                 uint64_t order_id = event.payload.value("order_id", 0ULL);
@@ -485,6 +486,7 @@ void MatchingEngine::replay_events(const std::vector<Event>& events) {
             case EventType::TRADE_EXECUTED: {
                 Trade trade = event.payload.get<Trade>();
                 trades_.push_back(trade);
+                record_position(trade);
 
                 if (trade.id >= next_trade_id_) {
                     next_trade_id_ = trade.id + 1;
@@ -499,6 +501,36 @@ void MatchingEngine::replay_events(const std::vector<Event>& events) {
                 break;
         }
     }
+}
+
+void MatchingEngine::record_position(const Trade& t) {
+    const int64_t cash = notional(t.price, t.quantity);
+    Position& buyer = positions_[t.buyer_account_id][t.symbol];
+    buyer.base += t.quantity;
+    buyer.quote -= cash;
+    Position& seller = positions_[t.seller_account_id][t.symbol];
+    seller.base -= t.quantity;
+    seller.quote += cash;
+}
+
+AccountView MatchingEngine::get_account(const std::string& account_id) const {
+    AccountView v;
+    v.account_id = account_id;
+    if (auto it = positions_.find(account_id); it != positions_.end()) {
+        v.positions = it->second;
+    }
+    // Every live order rests in a book, so walking the books in priority
+    // order finds them all.
+    auto collect = [&](const std::vector<Order*>& orders) {
+        for (const Order* o : orders) {
+            if (o->account_id == account_id) v.open_orders.push_back(*o);
+        }
+    };
+    for (const auto& [symbol, book] : books_) {
+        collect(book->get_all_bids());
+        collect(book->get_all_asks());
+    }
+    return v;
 }
 
 void MatchingEngine::apply_fill(uint64_t order_id, int64_t qty) {
@@ -533,6 +565,7 @@ Snapshot MatchingEngine::create_snapshot() const {
     }
 
     s.idempotency_keys.assign(idempotency_keys_.begin(), idempotency_keys_.end());
+    s.positions.insert(positions_.begin(), positions_.end());
     return s;
 }
 

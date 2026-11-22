@@ -8,6 +8,8 @@
 // The previous benchmark shelled out to curl once per order over HTTP, which
 // measured process spawn cost and told us nothing about matching.
 
+#include <x86intrin.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -15,8 +17,6 @@
 #include <random>
 #include <string>
 #include <vector>
-
-#include <x86intrin.h>
 
 #include "exchange/matching_engine.hpp"
 
@@ -41,8 +41,7 @@ double calibrate_ghz() {
     }
     const uint64_t c1 = cycles();
     const auto t1 = clock::now();
-    const double ns =
-        std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
+    const double ns = std::chrono::duration_cast<std::chrono::nanoseconds>(t1 - t0).count();
     return static_cast<double>(c1 - c0) / ns;
 }
 
@@ -72,9 +71,9 @@ Stats summarize(std::vector<uint64_t>& samples, double ghz, double total_ns) {
 }
 
 void report(const char* name, const Stats& s, size_t n, uint64_t trades) {
-    std::printf("%-32s %8zu %8llu %10.0f %8.0f %8.0f %8.0f %9.0f %10.0f %10.0f\n", name,
-                n, static_cast<unsigned long long>(trades), s.throughput, s.mean, s.p50,
-                s.p90, s.p99, s.p999, s.max);
+    std::printf("%-32s %8zu %8llu %10.0f %8.0f %8.0f %8.0f %9.0f %10.0f %10.0f\n", name, n,
+                static_cast<unsigned long long>(trades), s.throughput, s.mean, s.p50, s.p90, s.p99,
+                s.p999, s.max);
 }
 
 enum class Mode {
@@ -106,8 +105,8 @@ std::vector<Order> make_orders(size_t n, Mode mode, int64_t band, unsigned seed)
         if (mode == Mode::Resting) {
             // Keep a hard gap between the sides so every order rests untouched
             // and we are timing the insert path alone.
-            o.price = (o.side == Side::BUY) ? (mid - band - offset(rng))
-                                            : (mid + band + offset(rng));
+            o.price =
+                (o.side == Side::BUY) ? (mid - band - offset(rng)) : (mid + band + offset(rng));
         } else {
             o.price = mid - band / 2 + offset(rng);
         }
@@ -117,12 +116,11 @@ std::vector<Order> make_orders(size_t n, Mode mode, int64_t band, unsigned seed)
     return out;
 }
 
-void run(const char* name, size_t n, Mode mode, int64_t band, bool with_log,
-         double ghz, Durability durability = Durability::PerEvent) {
+void run(const char* name, size_t n, Mode mode, int64_t band, bool with_log, double ghz,
+         Durability durability = Durability::PerEvent) {
     auto orders = make_orders(n, mode, band, 1234);
 
-    const std::string log_path =
-        with_log ? std::string("bench_events.jsonl") : std::string();
+    const std::string log_path = with_log ? std::string("bench_events.jsonl") : std::string();
     if (with_log) std::remove(log_path.c_str());
 
     MatchingEngine engine(log_path, "", 1000000, durability);
@@ -245,9 +243,8 @@ int main() {
     const double ghz = calibrate_ghz();
     std::printf("TSC calibrated at %.3f GHz\n\n", ghz);
 
-    std::printf("%-32s %8s %8s %10s %8s %8s %8s %9s %10s %10s\n", "scenario", "orders",
-                "trades", "ops/sec", "mean ns", "p50 ns", "p90 ns", "p99 ns",
-                "p99.9 ns", "max ns");
+    std::printf("%-32s %8s %8s %10s %8s %8s %8s %9s %10s %10s\n", "scenario", "orders", "trades",
+                "ops/sec", "mean ns", "p50 ns", "p90 ns", "p99 ns", "p99.9 ns", "max ns");
     std::printf("%s\n", std::string(126, '-').c_str());
 
     run("resting only (no crosses)", 200000, Mode::Resting, 500, false, ghz);
@@ -255,8 +252,7 @@ int main() {
     run("mixed (realistic depth)", 200000, Mode::Crossing, 100, false, ghz);
     run("mixed + log (flush per event)", 50000, Mode::Crossing, 100, true, ghz,
         Durability::PerEvent);
-    run("mixed + log (buffered)", 200000, Mode::Crossing, 100, true, ghz,
-        Durability::Buffered);
+    run("mixed + log (buffered)", 200000, Mode::Crossing, 100, true, ghz, Durability::Buffered);
     run_cancels("cancel, 10k deep over 5 levels", 10000, 5, 100000, ghz);
     run_cancels("cancel, 100k deep over 5 levels", 100000, 5, 20000, ghz);
     run_sweep("sweep a 10k-deep level", 10000, 100000, ghz);
