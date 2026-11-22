@@ -12,7 +12,8 @@ void to_json(nlohmann::json& j, const Snapshot& s) {
         {"timestamp_ns", s.timestamp_ns},
         {"next_order_id", s.next_order_id},
         {"next_trade_id", s.next_trade_id},
-        {"orders", s.orders}};
+        {"orders", s.orders},
+        {"idempotency_keys", s.idempotency_keys}};
 }
 
 void from_json(const nlohmann::json& j, Snapshot& s) {
@@ -27,6 +28,7 @@ void from_json(const nlohmann::json& j, Snapshot& s) {
     for (const auto& item : j.at("orders")) {
         s.orders.push_back(order_from_persisted(item));
     }
+    s.idempotency_keys = j.value("idempotency_keys", std::vector<std::string>{});
 }
 
 SnapshotManager::SnapshotManager(const std::string& path, uint64_t interval)

@@ -21,6 +21,13 @@ struct PlaceOrderResult {
     std::vector<Trade> trades;
 };
 
+struct ReplaceOrderResult {
+    bool success = false;
+    ErrorCode error_code = ErrorCode::NONE;
+    Order order;
+    std::vector<Trade> trades;  // non-empty when the new price crossed the book
+};
+
 struct CancelOrderResult {
     bool success = false;
     ErrorCode error_code = ErrorCode::ORDER_NOT_FOUND;
@@ -32,6 +39,8 @@ struct EngineStats {
     uint64_t total_trades = 0;
     uint64_t total_cancels = 0;
     uint64_t total_rejects = 0;
+    uint64_t total_replaces = 0;
+    uint64_t total_expired = 0;  // IOC, FOK and market remainders cancelled by the engine
     uint64_t event_sequence = 0;
 };
 
@@ -42,6 +51,8 @@ inline void to_json(nlohmann::json& j, const EngineStats& s) {
         {"total_trades", s.total_trades},
         {"total_cancels", s.total_cancels},
         {"total_rejects", s.total_rejects},
+        {"total_replaces", s.total_replaces},
+        {"total_expired", s.total_expired},
         {"event_sequence", s.event_sequence}
     };
 }
@@ -55,6 +66,13 @@ public:
 
     PlaceOrderResult place_order(Order order);
     CancelOrderResult cancel_order(uint64_t order_id);
+
+    // Cancel/replace for a resting order: sets a new price and a new total
+    // quantity (filled + remaining) under the same order id. The order keeps
+    // its place in the queue only when the price is unchanged and the quantity
+    // does not grow; otherwise it moves to the back of its new price level, and
+    // if the new price crosses the book it trades first, like a new order.
+    ReplaceOrderResult replace_order(uint64_t order_id, int64_t new_price, int64_t new_quantity);
     bool recover();
     
     // Snapshot support
@@ -87,6 +105,19 @@ private:
 
     std::vector<Trade> match(Order* incoming);
     OrderBook& get_or_create_book(const std::string& symbol);
+
+    // How much of `needed` the incoming order could fill right now, walking the
+    // book exactly the way match() would (price limit and self-trade
+    // prevention included). Stops counting once `needed` is reached.
+    [[nodiscard]] int64_t fillable_quantity(const Order& incoming, int64_t needed) const;
+
+    // Cancels an order's unfilled remainder on the engine's own initiative
+    // (IOC, FOK, market remainder) and logs it so replay reaches the same state.
+    void expire(Order* order, const char* reason);
+
+    // Replay helper: applies a fill to one side of a logged trade, going
+    // through the book when the order is resting so level totals stay right.
+    void apply_fill(uint64_t order_id, int64_t qty);
 
     // Templated so the payload is only converted to JSON when the log is
     // actually enabled. Taking nlohmann::json by reference meant every caller

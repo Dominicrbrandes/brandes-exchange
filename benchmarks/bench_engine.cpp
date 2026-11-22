@@ -152,6 +152,93 @@ void run(const char* name, size_t n, Mode mode, int64_t band, bool with_log,
     if (with_log) std::remove(log_path.c_str());
 }
 
+// Cancel latency against deep queues. Builds a book of `depth` resting orders
+// spread over `levels` prices, then cancels a random resting order (timed) and
+// places a fresh one (untimed) so the depth stays constant. A per-level vector
+// pays for every cancel with a linear search and shift of that level.
+void run_cancels(const char* name, size_t depth, int64_t levels, size_t n, double ghz) {
+    MatchingEngine engine("", "", 1000000);
+    std::mt19937 rng(99);
+    std::uniform_int_distribution<int64_t> level(0, levels - 1);
+
+    auto place = [&]() {
+        Order o;
+        o.account_id = "maker";
+        o.symbol = "BTC-USD";
+        o.side = Side::SELL;
+        o.type = OrderType::LIMIT;
+        o.quantity = 1;
+        o.price = (50000 + level(rng)) * PRICE_SCALE;
+        return engine.place_order(o).order.id;
+    };
+
+    std::vector<uint64_t> live;
+    live.reserve(depth);
+    for (size_t i = 0; i < depth; ++i) live.push_back(place());
+
+    std::uniform_int_distribution<size_t> pick(0, depth - 1);
+    std::vector<uint64_t> samples;
+    samples.reserve(n);
+    uint64_t timed = 0;
+    for (size_t i = 0; i < n; ++i) {
+        const size_t k = pick(rng);
+        const uint64_t t0 = cycles();
+        auto r = engine.cancel_order(live[k]);
+        const uint64_t t1 = cycles();
+        samples.push_back(t1 - t0);
+        timed += t1 - t0;
+        if (!r.success) std::printf("cancel failed\n");
+        live[k] = place();
+    }
+    Stats s = summarize(samples, ghz, timed / ghz);
+    report(name, s, samples.size(), 0);
+}
+
+// Takers sweeping a deep queue of one-lot resting orders at a single price.
+// Every fill removes the order at the front of the level, which a per-level
+// vector turns into a shift of the whole queue.
+void run_sweep(const char* name, size_t depth, size_t n, double ghz) {
+    MatchingEngine engine("", "", 1000000);
+    const int64_t px = 50000 * PRICE_SCALE;
+    size_t maker = 0;
+
+    auto rest = [&]() {
+        Order o;
+        o.account_id = "maker" + std::to_string(maker++ % 16);
+        o.symbol = "BTC-USD";
+        o.side = Side::SELL;
+        o.type = OrderType::LIMIT;
+        o.quantity = 1;
+        o.price = px;
+        engine.place_order(o);
+    };
+    for (size_t i = 0; i < depth; ++i) rest();
+
+    Order take;
+    take.account_id = "taker";
+    take.symbol = "BTC-USD";
+    take.side = Side::BUY;
+    take.type = OrderType::LIMIT;
+    take.quantity = 1;
+    take.price = px;
+
+    std::vector<uint64_t> samples;
+    samples.reserve(n);
+    uint64_t timed = 0;
+    uint64_t trades = 0;
+    for (size_t i = 0; i < n; ++i) {
+        const uint64_t t0 = cycles();
+        auto r = engine.place_order(take);
+        const uint64_t t1 = cycles();
+        samples.push_back(t1 - t0);
+        timed += t1 - t0;
+        trades += r.trades.size();
+        rest();
+    }
+    Stats s = summarize(samples, ghz, timed / ghz);
+    report(name, s, samples.size(), trades);
+}
+
 }  // namespace
 
 int main() {
@@ -170,6 +257,9 @@ int main() {
         Durability::PerEvent);
     run("mixed + log (buffered)", 200000, Mode::Crossing, 100, true, ghz,
         Durability::Buffered);
+    run_cancels("cancel, 10k deep over 5 levels", 10000, 5, 100000, ghz);
+    run_cancels("cancel, 100k deep over 5 levels", 100000, 5, 20000, ghz);
+    run_sweep("sweep a 10k-deep level", 10000, 100000, ghz);
 
     return 0;
 }

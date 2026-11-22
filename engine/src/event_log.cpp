@@ -7,6 +7,13 @@ namespace exchange {
 EventLog::EventLog(const std::string& path, Durability durability)
     : path_(path), durability_(durability) {
     if (!path_.empty()) {
+        // Continue numbering after whatever an earlier run already wrote.
+        // Restarting at zero produced duplicate sequence numbers after a
+        // restart, so a later snapshot-plus-tail recovery replayed events from
+        // the earlier run a second time.
+        for (const auto& e : read_all()) {
+            if (e.sequence > sequence_) sequence_ = e.sequence;
+        }
         file_.open(path_, std::ios::app);
         enabled_ = file_.is_open();
     }

@@ -15,6 +15,13 @@ constexpr int64_t PRICE_SCALE = 100000000;
 
 enum class Side { BUY, SELL };
 enum class OrderType { LIMIT, MARKET };
+
+// How long an order may wait for liquidity.
+//   GTC  good till cancelled: any unfilled remainder rests on the book
+//   IOC  immediate or cancel: fill what is available now, cancel the rest
+//   FOK  fill or kill: fill the whole quantity now or do nothing at all
+// Market orders never rest, so a market GTC is treated as IOC.
+enum class TimeInForce { GTC, IOC, FOK };
 enum class OrderStatus { NEW, PARTIAL, FILLED, CANCELLED, REJECTED };
 
 NLOHMANN_JSON_SERIALIZE_ENUM(Side, {
@@ -25,6 +32,12 @@ NLOHMANN_JSON_SERIALIZE_ENUM(Side, {
 NLOHMANN_JSON_SERIALIZE_ENUM(OrderType, {
     {OrderType::LIMIT, "LIMIT"}, 
     {OrderType::MARKET, "MARKET"}
+})
+
+NLOHMANN_JSON_SERIALIZE_ENUM(TimeInForce, {
+    {TimeInForce::GTC, "GTC"},
+    {TimeInForce::IOC, "IOC"},
+    {TimeInForce::FOK, "FOK"}
 })
 
 NLOHMANN_JSON_SERIALIZE_ENUM(OrderStatus, {
@@ -41,6 +54,7 @@ struct Order {
     std::string symbol;
     Side side = Side::BUY;
     OrderType type = OrderType::LIMIT;
+    TimeInForce time_in_force = TimeInForce::GTC;
     int64_t price = 0;           // In fixed-point units
     int64_t quantity = 0;        // Original quantity
     int64_t remaining_qty = 0;   // Unfilled quantity
@@ -98,7 +112,8 @@ enum class EventType {
     ORDER_CANCELLED,
     ORDER_REJECTED,
     TRADE_EXECUTED,
-    SNAPSHOT_MARKER
+    SNAPSHOT_MARKER,
+    ORDER_REPLACED
 };
 
 NLOHMANN_JSON_SERIALIZE_ENUM(EventType, {
@@ -106,7 +121,8 @@ NLOHMANN_JSON_SERIALIZE_ENUM(EventType, {
     {EventType::ORDER_CANCELLED, "ORDER_CANCELLED"},
     {EventType::ORDER_REJECTED, "ORDER_REJECTED"},
     {EventType::TRADE_EXECUTED, "TRADE_EXECUTED"},
-    {EventType::SNAPSHOT_MARKER, "SNAPSHOT_MARKER"}
+    {EventType::SNAPSHOT_MARKER, "SNAPSHOT_MARKER"},
+    {EventType::ORDER_REPLACED, "ORDER_REPLACED"}
 })
 
 struct Event {
@@ -130,6 +146,7 @@ void append_json(std::string& out, const Trade& t);
 
 [[nodiscard]] const char* to_string(Side s);
 [[nodiscard]] const char* to_string(OrderType t);
+[[nodiscard]] const char* to_string(TimeInForce t);
 [[nodiscard]] const char* to_string(OrderStatus s);
 [[nodiscard]] const char* to_string(EventType t);
 

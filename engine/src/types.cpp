@@ -15,6 +15,9 @@ void to_json(nlohmann::json& j, const Order& o) {
                        {"remaining_qty", o.remaining_qty},
                        {"timestamp_ns", o.timestamp_ns},
                        {"status", o.status}};
+    if (o.time_in_force != TimeInForce::GTC) {
+        j["time_in_force"] = o.time_in_force;
+    }
     if (!o.idempotency_key.empty()) {
         j["idempotency_key"] = o.idempotency_key;
     }
@@ -28,6 +31,9 @@ void from_json(const nlohmann::json& j, Order& o) {
     j.at("symbol").get_to(o.symbol);
     j.at("side").get_to(o.side);
     j.at("type").get_to(o.type);
+    if (j.contains("time_in_force") && !j["time_in_force"].is_null()) {
+        j.at("time_in_force").get_to(o.time_in_force);
+    }
     if (j.contains("price")) {
         j.at("price").get_to(o.price);
     }
@@ -48,6 +54,7 @@ Order order_from_persisted(const nlohmann::json& j) {
     j.at("symbol").get_to(o.symbol);
     j.at("side").get_to(o.side);
     j.at("type").get_to(o.type);
+    o.time_in_force = j.value("time_in_force", TimeInForce::GTC);
     j.at("quantity").get_to(o.quantity);
     if (j.contains("price")) {
         j.at("price").get_to(o.price);
@@ -123,6 +130,15 @@ const char* to_string(OrderType t) {
     return t == OrderType::LIMIT ? "LIMIT" : "MARKET";
 }
 
+const char* to_string(TimeInForce t) {
+    switch (t) {
+        case TimeInForce::GTC: return "GTC";
+        case TimeInForce::IOC: return "IOC";
+        case TimeInForce::FOK: return "FOK";
+    }
+    return "GTC";
+}
+
 const char* to_string(OrderStatus s) {
     switch (s) {
         case OrderStatus::NEW: return "NEW";
@@ -141,6 +157,7 @@ const char* to_string(EventType t) {
         case EventType::ORDER_REJECTED: return "ORDER_REJECTED";
         case EventType::TRADE_EXECUTED: return "TRADE_EXECUTED";
         case EventType::SNAPSHOT_MARKER: return "SNAPSHOT_MARKER";
+        case EventType::ORDER_REPLACED: return "ORDER_REPLACED";
     }
     return "ORDER_PLACED";
 }
@@ -212,6 +229,11 @@ void append_json(std::string& out, const Order& o) {
     append_key(out, "timestamp_ns");  append_uint(out, o.timestamp_ns);
     out += ',';
     append_key(out, "status");        append_escaped(out, to_string(o.status));
+    if (o.time_in_force != TimeInForce::GTC) {
+        out += ',';
+        append_key(out, "time_in_force");
+        append_escaped(out, to_string(o.time_in_force));
+    }
     if (!o.idempotency_key.empty()) {
         out += ',';
         append_key(out, "idempotency_key");

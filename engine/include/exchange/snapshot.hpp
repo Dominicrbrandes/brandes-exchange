@@ -14,6 +14,10 @@ struct Snapshot {
     uint64_t next_order_id = 1;
     uint64_t next_trade_id = 1;
     std::vector<Order> orders;
+    // Every idempotency key ever accepted, including those of orders that have
+    // finished and so are not in `orders`. Without them a client retry after a
+    // restart could place the same order twice.
+    std::vector<std::string> idempotency_keys;
 };
 
 void to_json(nlohmann::json& j, const Snapshot& s);

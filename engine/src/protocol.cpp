@@ -36,6 +36,19 @@ std::string ProtocolHandler::handle(const std::string& json_command) {
                                 {"message", error_message(r.error_code)}};
             }
         }
+        else if (type == "replace_order") {
+            uint64_t order_id = cmd.at("order_id").get<uint64_t>();
+            int64_t price = cmd.at("price").get<int64_t>();
+            int64_t quantity = cmd.at("quantity").get<int64_t>();
+            auto r = engine_.replace_order(order_id, price, quantity);
+            out["success"] = r.success;
+            if (r.success) {
+                out["data"] = {{"order", r.order}, {"trades", r.trades}};
+            } else {
+                out["error"] = {{"code", r.error_code},
+                                {"message", error_message(r.error_code)}};
+            }
+        }
         else if (type == "get_order") {
             uint64_t order_id = cmd.at("order_id").get<uint64_t>();
             auto order_opt = engine_.get_order(order_id);
