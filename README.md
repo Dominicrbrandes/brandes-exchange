@@ -1,5 +1,7 @@
 # Brandes Exchange
 
+[![CI](https://github.com/Dominicrbrandes/brandes-exchange/actions/workflows/ci.yml/badge.svg)](https://github.com/Dominicrbrandes/brandes-exchange/actions/workflows/ci.yml)
+
 A limit order book matching engine in C++20, with an event-sourced recovery
 path, a FastAPI service in front of it, and a React trading UI.
 
